@@ -113,6 +113,7 @@
 #include "textures/windy.h"
 #include "textures/wrinkled.h"
 #include "media/grid.h"
+#include "media/emission_grid.h"
 #include "media/homogeneous.h"
 
 #include <map>
@@ -724,6 +725,41 @@ std::shared_ptr<Medium> MakeMedium(const std::string &name,
                                 Scale(p1.x - p0.x, p1.y - p0.y, p1.z - p0.z);
         m = new GridDensityMedium(sig_a, sig_s, g, nx, ny, nz,
                                   medium2world * data2Medium, data);
+    } else if (name == "heterogeneous_emission") {
+        int nDensityItems, nTemperatureItems;
+        const Float *densityData = paramSet.FindFloat("density", &nDensityItems);
+        if (!densityData) {
+            Error("No \"density\" values provided for heterogeneous medium?");
+            return NULL;
+        }
+        const Float *temperatureData = paramSet.FindFloat("temperature", &nTemperatureItems);
+        if (!temperatureData) {
+            Error("No \"temperature\" values provided for heterogeneous medium?");
+            return NULL;
+        }
+        int nx = paramSet.FindOneInt("nx", 1);
+        int ny = paramSet.FindOneInt("ny", 1);
+        int nz = paramSet.FindOneInt("nz", 1);
+        Point3f p0 = paramSet.FindOnePoint3f("p0", Point3f(0.f, 0.f, 0.f));
+        Point3f p1 = paramSet.FindOnePoint3f("p1", Point3f(1.f, 1.f, 1.f));
+        if (nDensityItems != nx * ny * nz) {
+            Error(
+                    "EmissionGridMedium has %d density values; expected nx*ny*nz = "
+                    "%d",
+                    nDensityItems, nx * ny * nz);
+            return NULL;
+        }
+        if (nTemperatureItems != nx * ny * nz) {
+            Error(
+                    "EmissionGridMedium has %d temperature values; expected nx*ny*nz = "
+                    "%d",
+                    nTemperatureItems, nx * ny * nz);
+            return NULL;
+        }
+        Transform data2Medium = Translate(Vector3f(p0)) *
+                                Scale(p1.x - p0.x, p1.y - p0.y, p1.z - p0.z);
+        m = new EmissionGridMedium(sig_a, sig_s, g, nx, ny, nz,
+                                  medium2world * data2Medium, densityData, temperatureData);
     } else
         Warning("Medium \"%s\" unknown.", name.c_str());
     paramSet.ReportUnused();
