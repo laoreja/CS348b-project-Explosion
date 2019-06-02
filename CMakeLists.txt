@@ -516,6 +516,9 @@ SET(ALL_PBRT_LIBS
   glog
   Ptex_static
   ${ZLIB_LIBRARY}
+  openvdb
+  half
+  tbb
 )
 
 # Main renderer

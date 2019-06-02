@@ -80,6 +80,7 @@ class Medium {
     virtual Spectrum Sample(const Ray &ray, Sampler &sampler,
                             MemoryArena &arena,
                             MediumInteraction *mi) const = 0;
+    static void tempToRGBSpectrum(Float T, RGBSpectrum &r);
 };
 
 // HenyeyGreenstein Declarations

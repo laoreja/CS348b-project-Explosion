@@ -100,6 +100,7 @@ extern const Float RGBIllum2SpectBlue[nRGB2SpectSamples];
 template <int nSpectrumSamples>
 class CoefficientSpectrum {
   public:
+//    Float c[nSpectrumSamples];
     // CoefficientSpectrum Public Methods
     CoefficientSpectrum(Float v = 0.f) {
         for (int i = 0; i < nSpectrumSamples; ++i) c[i] = v;
@@ -432,11 +433,37 @@ class RGBSpectrum : public CoefficientSpectrum<3> {
   public:
     // RGBSpectrum Public Methods
     RGBSpectrum(Float v = 0.f) : CoefficientSpectrum<3>(v) {}
+    RGBSpectrum(Float v1, Float v2, Float v3) {
+        c[0] = v1;
+        c[1] = v2;
+        c[2] = v3;
+    }
     RGBSpectrum(const CoefficientSpectrum<3> &v) : CoefficientSpectrum<3>(v) {}
     RGBSpectrum(const RGBSpectrum &s,
                 SpectrumType type = SpectrumType::Reflectance) {
         *this = s;
     }
+    inline Float maxComponent() const {
+        if (c[0] > c[1]){
+            if (c[0] > c[2]){
+                return c[0];
+            } else {
+                return c[2];
+            }
+        }else{
+            if (c[1] > c[2]){
+                return c[1];
+            } else {
+                return c[2];
+            }
+        }
+    }
+    inline void clampNegative() {
+        if (c[0] < 0) c[0] = 0;
+        if (c[1] < 0) c[1] = 0;
+        if (c[2] < 0) c[2] = 0;
+    }
+
     static RGBSpectrum FromRGB(const Float rgb[3],
                                SpectrumType type = SpectrumType::Reflectance) {
         RGBSpectrum s;

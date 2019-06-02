@@ -45,37 +45,100 @@
 #include "quaternion.h"
 
 namespace pbrt {
-
 // Matrix4x4 Declarations
-struct Matrix4x4 {
-    // Matrix4x4 Public Methods
-    Matrix4x4() {
-        m[0][0] = m[1][1] = m[2][2] = m[3][3] = 1.f;
-        m[0][1] = m[0][2] = m[0][3] = m[1][0] = m[1][2] = m[1][3] = m[2][0] =
+    struct Matrix4x4 {
+        // Matrix4x4 Public Methods
+        Matrix4x4() {
+            m[0][0] = m[1][1] = m[2][2] = m[3][3] = 1.f;
+            m[0][1] = m[0][2] = m[0][3] = m[1][0] = m[1][2] = m[1][3] = m[2][0] =
             m[2][1] = m[2][3] = m[3][0] = m[3][1] = m[3][2] = 0.f;
+        }
+        Matrix4x4(Float mat[4][4]);
+        Matrix4x4(Float t00, Float t01, Float t02, Float t03, Float t10, Float t11,
+                  Float t12, Float t13, Float t20, Float t21, Float t22, Float t23,
+                  Float t30, Float t31, Float t32, Float t33);
+        bool operator==(const Matrix4x4 &m2) const {
+            for (int i = 0; i < 4; ++i)
+                for (int j = 0; j < 4; ++j)
+                    if (m[i][j] != m2.m[i][j]) return false;
+            return true;
+        }
+        bool operator!=(const Matrix4x4 &m2) const {
+            for (int i = 0; i < 4; ++i)
+                for (int j = 0; j < 4; ++j)
+                    if (m[i][j] != m2.m[i][j]) return true;
+            return false;
+        }
+        friend Matrix4x4 Transpose(const Matrix4x4 &);
+        void Print(FILE *f) const {
+            fprintf(f, "[ ");
+            for (int i = 0; i < 4; ++i) {
+                fprintf(f, "  [ ");
+                for (int j = 0; j < 4; ++j) {
+                    fprintf(f, "%f", m[i][j]);
+                    if (j != 3) fprintf(f, ", ");
+                }
+                fprintf(f, " ]\n");
+            }
+            fprintf(f, " ] ");
+        }
+        static Matrix4x4 Mul(const Matrix4x4 &m1, const Matrix4x4 &m2) {
+            Matrix4x4 r;
+            for (int i = 0; i < 4; ++i)
+                for (int j = 0; j < 4; ++j)
+                    r.m[i][j] = m1.m[i][0] * m2.m[0][j] + m1.m[i][1] * m2.m[1][j] +
+                                m1.m[i][2] * m2.m[2][j] + m1.m[i][3] * m2.m[3][j];
+            return r;
+        }
+        friend Matrix4x4 Inverse(const Matrix4x4 &);
+
+        friend std::ostream &operator<<(std::ostream &os, const Matrix4x4 &m) {
+            // clang-format off
+            os << StringPrintf("[ [ %f, %f, %f, %f ] "
+                               "[ %f, %f, %f, %f ] "
+                               "[ %f, %f, %f, %f ] "
+                               "[ %f, %f, %f, %f ] ]",
+                               m.m[0][0], m.m[0][1], m.m[0][2], m.m[0][3],
+                               m.m[1][0], m.m[1][1], m.m[1][2], m.m[1][3],
+                               m.m[2][0], m.m[2][1], m.m[2][2], m.m[2][3],
+                               m.m[3][0], m.m[3][1], m.m[3][2], m.m[3][3]);
+            // clang-format on
+            return os;
+        }
+
+        Float m[4][4];
+    };
+// Matrix3x3 Declarations
+    struct Matrix3x3 {
+    // Matrix3x3 Public Methods
+    Matrix3x3() {
+        m[0][0] = m[1][1] = m[2][2] = 1.f;
+        m[0][1] = m[0][2] =
+        m[1][0] = m[1][2] =
+        m[2][0] = m[2][1] = 0.f;
     }
-    Matrix4x4(Float mat[4][4]);
-    Matrix4x4(Float t00, Float t01, Float t02, Float t03, Float t10, Float t11,
-              Float t12, Float t13, Float t20, Float t21, Float t22, Float t23,
-              Float t30, Float t31, Float t32, Float t33);
-    bool operator==(const Matrix4x4 &m2) const {
-        for (int i = 0; i < 4; ++i)
-            for (int j = 0; j < 4; ++j)
+    Matrix3x3(Float mat[3][3]);
+    Matrix3x3(Float t00, Float t01, Float t02,
+              Float t10, Float t11, Float t12,
+              Float t20, Float t21, Float t22);
+    bool operator==(const Matrix3x3 &m2) const {
+        for (int i = 0; i < 3; ++i)
+            for (int j = 0; j < 3; ++j)
                 if (m[i][j] != m2.m[i][j]) return false;
         return true;
     }
-    bool operator!=(const Matrix4x4 &m2) const {
-        for (int i = 0; i < 4; ++i)
-            for (int j = 0; j < 4; ++j)
+    bool operator!=(const Matrix3x3 &m2) const {
+        for (int i = 0; i < 3; ++i)
+            for (int j = 0; j < 3; ++j)
                 if (m[i][j] != m2.m[i][j]) return true;
         return false;
     }
-    friend Matrix4x4 Transpose(const Matrix4x4 &);
+    friend Matrix3x3 Transpose(const Matrix3x3 &);
     void Print(FILE *f) const {
         fprintf(f, "[ ");
-        for (int i = 0; i < 4; ++i) {
+        for (int i = 0; i < 3; ++i) {
             fprintf(f, "  [ ");
-            for (int j = 0; j < 4; ++j) {
+            for (int j = 0; j < 3; ++j) {
                 fprintf(f, "%f", m[i][j]);
                 if (j != 3) fprintf(f, ", ");
             }
@@ -83,31 +146,38 @@ struct Matrix4x4 {
         }
         fprintf(f, " ] ");
     }
-    static Matrix4x4 Mul(const Matrix4x4 &m1, const Matrix4x4 &m2) {
-        Matrix4x4 r;
-        for (int i = 0; i < 4; ++i)
-            for (int j = 0; j < 4; ++j)
+    static Matrix3x3 Mul(const Matrix3x3 &m1, const Matrix3x3 &m2) {
+        Matrix3x3 r;
+        for (int i = 0; i < 3; ++i)
+            for (int j = 0; j < 3; ++j)
                 r.m[i][j] = m1.m[i][0] * m2.m[0][j] + m1.m[i][1] * m2.m[1][j] +
-                            m1.m[i][2] * m2.m[2][j] + m1.m[i][3] * m2.m[3][j];
+                            m1.m[i][2] * m2.m[2][j];
         return r;
     }
-    friend Matrix4x4 Inverse(const Matrix4x4 &);
 
-    friend std::ostream &operator<<(std::ostream &os, const Matrix4x4 &m) {
+    static Vector3f Mat3x3DotVec(const Matrix3x3 &m, const Vector3f &v) {
+        Vector3f r;
+        for (int i = 0; i < 3; ++i){
+            r[i] =  m.m[i][0] * v.x +
+                    m.m[i][1] * v.y +
+                    m.m[i][2] * v.z;
+        }
+        return r;
+    }
+
+    friend std::ostream &operator<<(std::ostream &os, const Matrix3x3 &m) {
         // clang-format off
-        os << StringPrintf("[ [ %f, %f, %f, %f ] "
-                           "[ %f, %f, %f, %f ] "
-                           "[ %f, %f, %f, %f ] "
-                           "[ %f, %f, %f, %f ] ]",
-                           m.m[0][0], m.m[0][1], m.m[0][2], m.m[0][3],
-                           m.m[1][0], m.m[1][1], m.m[1][2], m.m[1][3],
-                           m.m[2][0], m.m[2][1], m.m[2][2], m.m[2][3],
-                           m.m[3][0], m.m[3][1], m.m[3][2], m.m[3][3]);
+        os << StringPrintf("[ [ %f, %f, %f] "
+                           "[ %f, %f, %f] "
+                           "[ %f, %f, %f] ]",
+                           m.m[0][0], m.m[0][1], m.m[0][2],
+                           m.m[1][0], m.m[1][1], m.m[1][2],
+                           m.m[2][0], m.m[2][1], m.m[2][2]);
         // clang-format on
         return os;
     }
 
-    Float m[4][4];
+    Float m[3][3];
 };
 
 // Transform Declarations

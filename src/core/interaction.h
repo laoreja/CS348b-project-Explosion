@@ -103,14 +103,16 @@ struct Interaction {
 class MediumInteraction : public Interaction {
   public:
     // MediumInteraction Public Methods
-    MediumInteraction() : phase(nullptr) {}
+    MediumInteraction() : phase(nullptr), Le(0.f) {}
     MediumInteraction(const Point3f &p, const Vector3f &wo, Float time,
-                      const Medium *medium, const PhaseFunction *phase)
-        : Interaction(p, wo, time, medium), phase(phase) {}
-    bool IsValid() const { return phase != nullptr; }
-
+                      const Medium *medium, const PhaseFunction *phase, const Spectrum &Le=Spectrum(0.f))
+        : Interaction(p, wo, time, medium), phase(phase), Le(Le) {}
+    bool IsValid() const { return phase != nullptr || !Le.IsBlack(); }
+    const Spectrum getLe() {return Le;}
     // MediumInteraction Public Data
     const PhaseFunction *phase;
+  private:
+    Spectrum Le;
 };
 
 // SurfaceInteraction Declarations

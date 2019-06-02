@@ -217,4 +217,31 @@ Float HenyeyGreenstein::p(const Vector3f &wo, const Vector3f &wi) const {
     return PhaseHG(Dot(wo, wi), g);
 }
 
+void Medium::tempToRGBSpectrum(Float T, RGBSpectrum &r){
+    Float Le[nCIESamples];
+    BlackbodyNormalized(CIE_lambda, nCIESamples, T, Le);
+    Float xyz[3] = {0, 0, 0};
+    for (int i = 0; i < nCIESamples; ++i) {
+        xyz[0] += Le[i] * CIE_X[i];
+        xyz[1] += Le[i] * CIE_Y[i];
+        xyz[2] += Le[i] * CIE_Z[i];
+    }
+//    if (isNaN(xyz[0]) || isNaN(xyz[1]) || isNaN(xyz[2])) {
+//        std::cout << " raw xyz has nan " << std::endl;
+//    }
+    Float scale = Float(CIE_lambda[nCIESamples - 1] - CIE_lambda[0]) / Float(nCIESamples);
+    xyz[0] *= scale;
+    xyz[1] *= scale;
+    xyz[2] *= scale;
+
+    r = RGBSpectrum::FromXYZ(xyz);
+    Float biggest = r.maxComponent();
+    if (biggest > 1.){
+        r /= biggest;
+    }
+    r.clampNegative();
+//    if (r.HasNaNs())
+//        std::cout << "r: " << r << std::endl;
+}
+
 }  // namespace pbrt

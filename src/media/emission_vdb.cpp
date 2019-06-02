@@ -31,91 +31,32 @@
  */
 
 
-// media/emission_grid.cpp*
-#include "media/emission_grid.h"
+// media/emission_openvdb.cpp*
+#include "media/emission_vdb.h"
 #include "paramset.h"
 #include "sampler.h"
 #include "stats.h"
 #include "interaction.h"
+
 //#include "spectrum.h"
 
 namespace pbrt {
 
-STAT_RATIO("Media/EmissionGrid steps per Tr() call", nEmissionTrSteps, nEmissionTrCalls);
+STAT_RATIO("Media/EmissionOpenVDB steps per Tr() call", nEmissionOpenVDBTrSteps, nEmissionOpenVDBTrCalls);
 
-//RGBSpectrum EmissionGridMedium::tempToRGBSpectrum(Float single_T){
-//    Float Le[nCIESamples];
-//    BlackbodyNormalized(CIE_lambda, nCIESamples, single_T * tempScale, Le);
-//    Float xyz[3] = {0, 0, 0};
-//    for (int i = 0; i < nCIESamples; ++i) {
-//        xyz[0] += Le[i] * CIE_X[i];
-//        xyz[1] += Le[i] * CIE_Y[i];
-//        xyz[2] += Le[i] * CIE_Z[i];
-//    }
-//    Float scale = Float(CIE_lambda[nCIESamples - 1] - CIE_lambda[0]) / Float(nCIESamples);
-//    xyz[0] *= scale;
-//    xyz[1] *= scale;
-//    xyz[2] *= scale;
-//
-//    RGBSpectrum r = RGBSpectrum::FromXYZ(xyz);
-//    Float biggest = r.maxComponent();
-//    if (biggest > 1.){
-//        r /= biggest;
-//    }
-//    r.clampNegative();
-//    return r;
-//}
-
-// EmissionGridMedium Method Definitions
-Float EmissionGridMedium::Density(const Point3f &p) const {
+// EmissionVDBMedium Method Definitions
+Float EmissionVDBMedium::Density(const Point3f &p) const {
     // Compute voxel coordinates and offsets for _p_
-    Point3f pSamples(p.x * nx - .5f, p.y * ny - .5f, p.z * nz - .5f);
-    Point3i pi = (Point3i)Floor(pSamples);
-    Vector3f d = pSamples - (Point3f)pi;
-
-    // Trilinearly interpolate density values to compute local density
-    Float d00 = Lerp(d.x, D(pi), D(pi + Vector3i(1, 0, 0)));
-    Float d10 = Lerp(d.x, D(pi + Vector3i(0, 1, 0)), D(pi + Vector3i(1, 1, 0)));
-    Float d01 = Lerp(d.x, D(pi + Vector3i(0, 0, 1)), D(pi + Vector3i(1, 0, 1)));
-    Float d11 = Lerp(d.x, D(pi + Vector3i(0, 1, 1)), D(pi + Vector3i(1, 1, 1)));
-    Float d0 = Lerp(d.y, d00, d10);
-    Float d1 = Lerp(d.y, d01, d11);
-    return Lerp(d.z, d0, d1);
+    return densitySampler->isSample(openvdb::Vec3R(p.x * nx - .5f + sx, p.y * ny - .5f + sy, p.z * nz - .5f + sz));
 }
 
-Float EmissionGridMedium::Temperature(const Point3f &p) const {
+Spectrum EmissionVDBMedium::Le(const Point3f &p) const {
     // Compute voxel coordinates and offsets for _p_
-    Point3f pSamples(p.x * nx - .5f, p.y * ny - .5f, p.z * nz - .5f);
-    Point3i pi = (Point3i)Floor(pSamples);
-    Vector3f d = pSamples - (Point3f)pi;
-
-    // Trilinearly interpolate density values to compute local density
-    Float d00 = Lerp(d.x, T(pi), T(pi + Vector3i(1, 0, 0)));
-    Float d10 = Lerp(d.x, T(pi + Vector3i(0, 1, 0)), T(pi + Vector3i(1, 1, 0)));
-    Float d01 = Lerp(d.x, T(pi + Vector3i(0, 0, 1)), T(pi + Vector3i(1, 0, 1)));
-    Float d11 = Lerp(d.x, T(pi + Vector3i(0, 1, 1)), T(pi + Vector3i(1, 1, 1)));
-    Float d0 = Lerp(d.y, d00, d10);
-    Float d1 = Lerp(d.y, d01, d11);
-    return Lerp(d.z, d0, d1);
+    openvdb::Vec3f Le_vec3f = LeSampler->isSample(openvdb::Vec3R(p.x * nx - .5f + sx, p.y * ny - .5f + sy, p.z * nz - .5f + sz));
+    return Spectrum(Le_vec3f.x(), Le_vec3f.y(), Le_vec3f.z());
 }
 
-Spectrum EmissionGridMedium::Le(const Point3f &p) const {
-    // Compute voxel coordinates and offsets for _p_
-    Point3f pSamples(p.x * nx - .5f, p.y * ny - .5f, p.z * nz - .5f);
-    Point3i pi = (Point3i)Floor(pSamples);
-    Vector3f d = pSamples - (Point3f)pi;
-
-    // Trilinearly interpolate density values to compute local density
-    Spectrum d00 = Lerp(d.x, LeFromGrid(pi), LeFromGrid(pi + Vector3i(1, 0, 0)));
-    Spectrum d10 = Lerp(d.x, LeFromGrid(pi + Vector3i(0, 1, 0)), LeFromGrid(pi + Vector3i(1, 1, 0)));
-    Spectrum d01 = Lerp(d.x, LeFromGrid(pi + Vector3i(0, 0, 1)), LeFromGrid(pi + Vector3i(1, 0, 1)));
-    Spectrum d11 = Lerp(d.x, LeFromGrid(pi + Vector3i(0, 1, 1)), LeFromGrid(pi + Vector3i(1, 1, 1)));
-    Spectrum d0 = Lerp(d.y, d00, d10);
-    Spectrum d1 = Lerp(d.y, d01, d11);
-    return Lerp(d.z, d0, d1);
-}
-
-Spectrum EmissionGridMedium::Sample(const Ray &rWorld, Sampler &sampler,
+Spectrum EmissionVDBMedium::Sample(const Ray &rWorld, Sampler &sampler,
                                    MemoryArena &arena,
                                    MediumInteraction *mi) const {
     ProfilePhase _(Prof::MediumSample);
@@ -151,9 +92,9 @@ Spectrum EmissionGridMedium::Sample(const Ray &rWorld, Sampler &sampler,
     return Spectrum(1.f);
 }
 
-Spectrum EmissionGridMedium::Tr(const Ray &rWorld, Sampler &sampler) const {
+Spectrum EmissionVDBMedium::Tr(const Ray &rWorld, Sampler &sampler) const {
     ProfilePhase _(Prof::MediumTr);
-    ++nEmissionTrCalls;
+    ++nEmissionOpenVDBTrCalls;
 
     Ray ray = WorldToMedium(
         Ray(rWorld.o, Normalize(rWorld.d), rWorld.tMax * rWorld.d.Length()));
@@ -165,7 +106,7 @@ Spectrum EmissionGridMedium::Tr(const Ray &rWorld, Sampler &sampler) const {
     // Perform ratio tracking to estimate the transmittance value
     Float Tr = 1, t = tMin;
     while (true) {
-        ++nEmissionTrSteps;
+        ++nEmissionOpenVDBTrSteps;
         t -= std::log(1 - sampler.Get1D()) * invMaxDensity / sigma_t;
         if (t >= tMax) break;
         Float density = Density(ray(t));

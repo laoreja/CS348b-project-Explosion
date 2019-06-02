@@ -37,6 +37,31 @@
 
 namespace pbrt {
 
+// Matrix3x3 Method Definitions
+Matrix3x3::Matrix3x3(Float mat[3][3]) { memcpy(m, mat, 9 * sizeof(Float)); }
+
+Matrix3x3::Matrix3x3(Float t00, Float t01, Float t02,
+                     Float t10, Float t11, Float t12,
+                     Float t20, Float t21, Float t22) {
+        m[0][0] = t00;
+        m[0][1] = t01;
+        m[0][2] = t02;
+
+        m[1][0] = t10;
+        m[1][1] = t11;
+        m[1][2] = t12;
+
+        m[2][0] = t20;
+        m[2][1] = t21;
+        m[2][2] = t22;
+    }
+
+Matrix3x3 Transpose(const Matrix3x3 &m) {
+    return Matrix3x3(m.m[0][0], m.m[1][0], m.m[2][0],
+                     m.m[0][1], m.m[1][1], m.m[2][1],
+                     m.m[0][2], m.m[1][2], m.m[2][2]);
+}
+
 // Matrix4x4 Method Definitions
 bool SolveLinearSystem2x2(const Float A[2][2], const Float B[2], Float *x0,
                           Float *x1) {

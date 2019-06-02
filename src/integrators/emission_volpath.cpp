@@ -31,7 +31,7 @@
  */
 
 // integrators/volpath.cpp*
-#include "integrators/volpath.h"
+#include "integrators/emission_volpath.h"
 #include "bssrdf.h"
 #include "camera.h"
 #include "film.h"
@@ -39,6 +39,7 @@
 #include "paramset.h"
 #include "scene.h"
 #include "stats.h"
+#include "media/emission_grid.h"
 
 namespace pbrt {
 
@@ -46,13 +47,13 @@ STAT_INT_DISTRIBUTION("Integrator/Path length", pathLength);
 STAT_COUNTER("Integrator/Volume interactions", volumeInteractions);
 STAT_COUNTER("Integrator/Surface interactions", surfaceInteractions);
 
-// VolPathIntegrator Method Definitions
-void VolPathIntegrator::Preprocess(const Scene &scene, Sampler &sampler) {
+// EmissionVolPathIntegrator Method Definitions
+void EmissionVolPathIntegrator::Preprocess(const Scene &scene, Sampler &sampler) {
     lightDistribution =
         CreateLightSampleDistribution(lightSampleStrategy, scene);
 }
 
-Spectrum VolPathIntegrator::Li(const RayDifferential &r, const Scene &scene,
+Spectrum EmissionVolPathIntegrator::Li(const RayDifferential &r, const Scene &scene,
                                Sampler &sampler, MemoryArena &arena,
                                int depth) const {
     ProfilePhase p(Prof::SamplerIntegratorLi);
@@ -76,27 +77,41 @@ Spectrum VolPathIntegrator::Li(const RayDifferential &r, const Scene &scene,
 
         // Sample the participating medium, if present
         MediumInteraction mi;
+//        EmissionGridMedium *tmp_medium;
+        Spectrum tmp;
         if (ray.medium) {
-            beta *= ray.medium->Sample(ray, sampler, arena, &mi);
+            tmp = ray.medium->Sample(ray, sampler, arena, &mi);
+            beta *= tmp;
+//            beta *= ray.medium->Sample(ray, sampler, arena, &mi);
         }
         if (beta.IsBlack()) break;
 
         // Handle an interaction with a medium or a surface
         if (mi.IsValid()) {
-            // Terminate path if ray escaped or _maxDepth_ was reached
-            if (bounces >= maxDepth) break;
-
             ++volumeInteractions;
-            // Handle scattering at point in medium for volumetric path tracer
-            const Distribution1D *lightDistrib =
-                lightDistribution->Lookup(mi.p);
-            L += beta * UniformSampleOneLight(mi, scene, arena, sampler, true,
-                                              lightDistrib);
 
-            Vector3f wo = -ray.d, wi;
-            mi.phase->Sample_p(wo, &wi, sampler.Get2D());
-            ray = mi.SpawnRay(wi);
-            specularBounce = false;
+            Spectrum medium_emission = mi.getLe();
+            if (!medium_emission.IsBlack()){
+                ReportValue(pathLength, bounces);
+                L += beta * medium_emission;
+//                std::cout << "interact emission L: " << L << " bounce: " << bounces <<" L+= " << beta * medium_emission << " sample: " << tmp << std::endl;
+                return L;
+
+            } else {
+                // Terminate path if ray escaped or _maxDepth_ was reached
+                if (bounces >= maxDepth) break;
+
+                // Handle scattering at point in medium for volumetric path tracer
+                const Distribution1D *lightDistrib =
+                        lightDistribution->Lookup(mi.p);
+                L += beta * UniformSampleOneLight(mi, scene, arena, sampler, true,
+                                                  lightDistrib);
+
+                Vector3f wo = -ray.d, wi;
+                mi.phase->Sample_p(wo, &wi, sampler.Get2D());
+                ray = mi.SpawnRay(wi);
+                specularBounce = false;
+            }
         } else {
             ++surfaceInteractions;
             // Handle scattering at point on surface for volumetric path tracer
@@ -190,7 +205,7 @@ Spectrum VolPathIntegrator::Li(const RayDifferential &r, const Scene &scene,
     return L;
 }
 
-VolPathIntegrator *CreateVolPathIntegrator(
+EmissionVolPathIntegrator *CreateEmissionVolPathIntegrator(
     const ParamSet &params, std::shared_ptr<Sampler> sampler,
     std::shared_ptr<const Camera> camera) {
     int maxDepth = params.FindOneInt("maxdepth", 5);
@@ -211,7 +226,7 @@ VolPathIntegrator *CreateVolPathIntegrator(
     Float rrThreshold = params.FindOneFloat("rrthreshold", 1.);
     std::string lightStrategy =
         params.FindOneString("lightsamplestrategy", "spatial");
-    return new VolPathIntegrator(maxDepth, camera, sampler, pixelBounds,
+    return new EmissionVolPathIntegrator(maxDepth, camera, sampler, pixelBounds,
                                  rrThreshold, lightStrategy);
 }
 

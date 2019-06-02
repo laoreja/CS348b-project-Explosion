@@ -59,6 +59,7 @@
 #include "integrators/path.h"
 #include "integrators/sppm.h"
 #include "integrators/volpath.h"
+#include "integrators/emission_volpath.h"
 #include "integrators/whitted.h"
 #include "lights/diffuse.h"
 #include "lights/distant.h"
@@ -114,7 +115,9 @@
 #include "textures/wrinkled.h"
 #include "media/grid.h"
 #include "media/emission_grid.h"
+#include "media/emission_vdb.h"
 #include "media/homogeneous.h"
+#include "media/emission_homogeneous.h"
 
 #include <map>
 #include <stdio.h>
@@ -702,6 +705,18 @@ std::shared_ptr<Medium> MakeMedium(const std::string &name,
     Medium *m = NULL;
     if (name == "homogeneous") {
         m = new HomogeneousMedium(sig_a, sig_s, g);
+    } else if (name == "homogeneous_emission") {
+        Float T = paramSet.FindOneFloat("T", 1000.0f);
+        m = new EmissionHomogeneousMedium(sig_a, sig_s, g, T);
+    } else if (name == "heterogeneous_emission_vdb") {
+        Point3f p0 = paramSet.FindOnePoint3f("p0", Point3f(0.f, 0.f, 0.f));
+        Point3f p1 = paramSet.FindOnePoint3f("p1", Point3f(1.f, 1.f, 1.f));
+        std::string vdb_path = paramSet.FindOneString("vdbpath", "");
+        Float tempScale = paramSet.FindOneFloat("tempscale", 5000.);
+        Transform data2Medium = Translate(Vector3f(p0)) *
+                                Scale(p1.x - p0.x, p1.y - p0.y, p1.z - p0.z);
+        m = new EmissionVDBMedium(sig_a, sig_s, g,
+                                  medium2world * data2Medium, tempScale, vdb_path);
     } else if (name == "heterogeneous") {
         int nitems;
         const Float *data = paramSet.FindFloat("density", &nitems);
@@ -737,6 +752,7 @@ std::shared_ptr<Medium> MakeMedium(const std::string &name,
             Error("No \"temperature\" values provided for heterogeneous medium?");
             return NULL;
         }
+        Float tempScale = paramSet.FindOneFloat("tempscale", 5000.);
         int nx = paramSet.FindOneInt("nx", 1);
         int ny = paramSet.FindOneInt("ny", 1);
         int nz = paramSet.FindOneInt("nz", 1);
@@ -759,7 +775,7 @@ std::shared_ptr<Medium> MakeMedium(const std::string &name,
         Transform data2Medium = Translate(Vector3f(p0)) *
                                 Scale(p1.x - p0.x, p1.y - p0.y, p1.z - p0.z);
         m = new EmissionGridMedium(sig_a, sig_s, g, nx, ny, nz,
-                                  medium2world * data2Medium, densityData, temperatureData);
+                                  medium2world * data2Medium, densityData, temperatureData, tempScale);
     } else
         Warning("Medium \"%s\" unknown.", name.c_str());
     paramSet.ReportUnused();
@@ -1723,6 +1739,8 @@ Integrator *RenderOptions::MakeIntegrator() const {
         integrator = CreatePathIntegrator(IntegratorParams, sampler, camera);
     else if (IntegratorName == "volpath")
         integrator = CreateVolPathIntegrator(IntegratorParams, sampler, camera);
+    else if (IntegratorName == "emissionvolpath")
+        integrator = CreateEmissionVolPathIntegrator(IntegratorParams, sampler, camera);
     else if (IntegratorName == "bdpt") {
         integrator = CreateBDPTIntegrator(IntegratorParams, sampler, camera);
     } else if (IntegratorName == "mlt") {
@@ -1736,8 +1754,8 @@ Integrator *RenderOptions::MakeIntegrator() const {
         return nullptr;
     }
 
-    if (renderOptions->haveScatteringMedia && IntegratorName != "volpath" &&
-        IntegratorName != "bdpt" && IntegratorName != "mlt") {
+    if (renderOptions->haveScatteringMedia && IntegratorName != "volpath" && IntegratorName != "emissionvolpath"
+        && IntegratorName != "bdpt" && IntegratorName != "mlt") {
         Warning(
             "Scene has scattering media but \"%s\" integrator doesn't support "
             "volume scattering. Consider using \"volpath\", \"bdpt\", or "

@@ -165,6 +165,7 @@ class MemoryArena;
 template <typename T, int logBlockSize = 2>
 class BlockedArray;
 struct Matrix4x4;
+struct Matrix3x3;
 class ParamSet;
 template <typename T>
 struct ParamSetItem;
