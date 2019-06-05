@@ -43,6 +43,7 @@
 #include "camera.h"
 #include "stats.h"
 
+
 namespace pbrt {
 
 STAT_COUNTER("Integrator/Camera rays traced", nCameraRays);
@@ -103,6 +104,119 @@ Spectrum UniformSampleOneLight(const Interaction &it, const Scene &scene,
     Point2f uScattering = sampler.Get2D();
     return EstimateDirect(it, uScattering, *light, uLight,
                           scene, sampler, arena, handleMedia) / lightPdf;
+}
+
+Spectrum EmissiveVolumeMIS(const Interaction &it, const Medium &emissiveVolume,
+                           const Scene &scene, Sampler &sampler,
+                           MemoryArena &arena, bool handleMedia, bool specular) {
+    Point2f uScattering = sampler.Get2D();
+
+    BxDFType bsdfFlags =
+            specular ? BSDF_ALL : BxDFType(BSDF_ALL & ~BSDF_SPECULAR);
+    Spectrum Ld(0.f);
+
+    // Sample light source with multiple importance sampling
+    Vector3f wi;
+    Float xPdf = 0, tPdfGivenWi = 0, scatteringPdf = 0;
+    VisibilityTester visibility;
+
+    Spectrum Li = emissiveVolume.Sample_Li(it, sampler, &wi, &xPdf, &tPdfGivenWi, &visibility);
+    VLOG(2) << "EstimateDirect Li: " << Li << ", wi: "
+            << wi << ", xPdf: " << xPdf;
+    if (xPdf > 0 && !Li.IsBlack()) {
+        // Compute BSDF or phase function's value for light sample
+        Spectrum f;
+        if (it.IsSurfaceInteraction()) {
+            // Evaluate BSDF for light sampling strategy
+            const SurfaceInteraction &isect = (const SurfaceInteraction &)it;
+            f = isect.bsdf->f(isect.wo, wi, bsdfFlags) *
+                AbsDot(wi, isect.shading.n);
+            scatteringPdf = isect.bsdf->Pdf(isect.wo, wi, bsdfFlags);
+            VLOG(2) << "  surf f*dot :" << f << ", scatteringPdf: " << scatteringPdf;
+        } else {
+            // Evaluate phase function for light sampling strategy
+            const MediumInteraction &mi = (const MediumInteraction &)it;
+            std::cout << "MediumInteraction in light sampling!" << std::endl;
+            Float p = mi.phase->p(mi.wo, wi);
+            f = Spectrum(p);
+            scatteringPdf = p;
+            VLOG(2) << "  medium p: " << p;
+        }
+        if (!f.IsBlack()) {
+            // Compute effect of visibility for light source sample
+            if (handleMedia) {
+                Li *= visibility.Tr(scene, sampler);
+                VLOG(2) << "  after Tr, Li: " << Li;
+            } else {
+                if (!visibility.Unoccluded(scene)) {
+                    VLOG(2) << "  shadow ray blocked";
+                    Li = Spectrum(0.f);
+                } else
+                    VLOG(2) << "  shadow ray unoccluded";
+            }
+
+            // Add light's contribution to reflected radiance
+            if (!Li.IsBlack() && tPdfGivenWi > 1e-5) {
+                Float weight =
+                        PowerHeuristic(1, xPdf/tPdfGivenWi, 1, scatteringPdf);
+                weight = 1.;
+                Ld += weight * f * tPdfGivenWi * Li / xPdf;
+            }
+        }
+    }
+
+    // Sample BSDF with multiple importance sampling
+    Spectrum f;
+    bool sampledSpecular = false;
+    if (it.IsSurfaceInteraction()) {
+        // Sample scattered direction for surface interactions
+        BxDFType sampledType;
+        const SurfaceInteraction &isect = (const SurfaceInteraction &)it;
+        f = isect.bsdf->Sample_f(isect.wo, &wi, uScattering, &scatteringPdf,
+                                 bsdfFlags, &sampledType);
+        f *= AbsDot(wi, isect.shading.n);
+        sampledSpecular = (sampledType & BSDF_SPECULAR) != 0;
+    } else {
+        std::cout << "MediumInteraction in BSDF sampling!" << std::endl;
+        // Sample scattered direction for medium interactions
+        const MediumInteraction &mi = (const MediumInteraction &)it;
+        Float p = mi.phase->Sample_p(mi.wo, &wi, uScattering);
+        f = Spectrum(p);
+        scatteringPdf = p;
+    }
+    VLOG(2) << "  BSDF / phase sampling f: " << f << ", scatteringPdf: " <<
+            scatteringPdf;
+    if (!f.IsBlack() && scatteringPdf > 0) {
+        // Account for light contributions along sampled direction _wi_
+        Float weight = 1;
+        Float tRayMax = 0;
+        Li = emissiveVolume.Sample_t_given_Wi(it, sampler, wi, &xPdf, &tPdfGivenWi, &tRayMax);
+        if (!sampledSpecular) {
+            if (tPdfGivenWi == 0) return Ld;
+            weight = PowerHeuristic(1, scatteringPdf, 1, xPdf/tPdfGivenWi);
+        }
+
+        // Find intersection and compute transmittance
+        SurfaceInteraction lightIsect;
+        Ray ray = it.SpawnRay(wi);
+        ray.tMax = tRayMax;
+        Spectrum Tr(1.f);
+        bool foundSurfaceInteraction =
+                handleMedia ? scene.IntersectTr(ray, sampler, &lightIsect, &Tr)
+                            : scene.Intersect(ray, &lightIsect);
+
+        // Add light contribution from material sampling
+//        CHECK(Tr == Spectrum(1.f)); check failed??? --> may sample from the volume. Since already consider Tr, not multiply it here.
+//        if (!foundSurfaceInteraction && !Li.IsBlack() && Tr != Spectrum(1.f)) {
+//            std::cout << "Tr in BSDF sampling not equal one: " << Tr << std::endl;
+//        }
+        weight = 0.;
+        if (!foundSurfaceInteraction && !Li.IsBlack()) Ld += weight * f * Li / scatteringPdf;
+    }
+
+    return Ld;
+
+
 }
 
 Spectrum EstimateDirect(const Interaction &it, const Point2f &uScattering,

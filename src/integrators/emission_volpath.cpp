@@ -39,7 +39,6 @@
 #include "paramset.h"
 #include "scene.h"
 #include "stats.h"
-#include "media/emission_grid.h"
 
 namespace pbrt {
 
@@ -91,7 +90,7 @@ Spectrum EmissionVolPathIntegrator::Li(const RayDifferential &r, const Scene &sc
             ++volumeInteractions;
 
             Spectrum medium_emission = mi.getLe();
-            if (!medium_emission.IsBlack()){
+            if (!medium_emission.IsInvalid()){
                 ReportValue(pathLength, bounces);
                 L += beta * medium_emission;
 //                std::cout << "interact emission L: " << L << " bounce: " << bounces <<" L+= " << beta * medium_emission << " sample: " << tmp << std::endl;
@@ -119,8 +118,9 @@ Spectrum EmissionVolPathIntegrator::Li(const RayDifferential &r, const Scene &sc
             // Possibly add emitted light at intersection
             if (bounces == 0 || specularBounce) {
                 // Add emitted light at path vertex or from the environment
-                if (foundIntersection)
+                if (foundIntersection) {
                     L += beta * isect.Le(-ray.d);
+                }
                 else
                     for (const auto &light : scene.infiniteLights)
                         L += beta * light->Le(ray);
@@ -141,8 +141,20 @@ Spectrum EmissionVolPathIntegrator::Li(const RayDifferential &r, const Scene &sc
             // contribution
             const Distribution1D *lightDistrib =
                 lightDistribution->Lookup(isect.p);
-            L += beta * UniformSampleOneLight(isect, scene, arena, sampler,
-                                              true, lightDistrib);
+            if (scene.emissiveVolumes.size() == 1){
+                const std::shared_ptr<Medium> &emissiveVolume = scene.emissiveVolumes[0];
+                if (sampler.Get1D() < emissiveVolume->sampleProb){
+                    L += beta * EmissiveVolumeMIS(isect, *emissiveVolume, scene, sampler, arena,
+                                                      true);
+                } else {
+                    L += beta * UniformSampleOneLight(isect, scene, arena, sampler,
+                                                      true, lightDistrib);
+                }
+            } else {
+                L += beta * UniformSampleOneLight(isect, scene, arena, sampler,
+                                                  true, lightDistrib);
+            }
+
 
             // Sample BSDF to get new path direction
             Vector3f wo = -ray.d, wi;
@@ -176,9 +188,24 @@ Spectrum EmissionVolPathIntegrator::Li(const RayDifferential &r, const Scene &sc
 
                 // Account for the attenuated direct subsurface scattering
                 // component
-                L += beta *
-                     UniformSampleOneLight(pi, scene, arena, sampler, true,
-                                           lightDistribution->Lookup(pi.p));
+                if (scene.emissiveVolumes.size() == 1){
+                    const std::shared_ptr<Medium> &emissiveVolume = scene.emissiveVolumes[0];
+                    if (sampler.Get1D() < emissiveVolume->sampleProb){
+                        L += beta * EmissiveVolumeMIS(pi, *emissiveVolume, scene, sampler, arena,
+                                                      true);
+                    } else {
+                        L += beta *
+                             UniformSampleOneLight(pi, scene, arena, sampler, true,
+                                                   lightDistribution->Lookup(pi.p));
+                    }
+                } else {
+                    L += beta *
+                         UniformSampleOneLight(pi, scene, arena, sampler, true,
+                                               lightDistribution->Lookup(pi.p));
+                }
+//                L += beta *
+//                     UniformSampleOneLight(pi, scene, arena, sampler, true,
+//                                           lightDistribution->Lookup(pi.p));
 
                 // Account for the indirect subsurface scattering component
                 Spectrum f = pi.bsdf->Sample_f(pi.wo, &wi, sampler.Get2D(),

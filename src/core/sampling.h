@@ -146,6 +146,34 @@ class Distribution2D {
     std::unique_ptr<Distribution1D> pMarginal;
 };
 
+class Distribution3D {
+public:
+    // Distribution3D Public Methods
+    Distribution3D(const Float *data, int nx, int ny, int nz);
+    Point3f SampleContinuous(const Point3f &u, Float *pdf) const {
+        Float pdfs[3];
+        int y, z;
+        Float d2 = pMarginalZ->SampleContinuous(u[2], &pdfs[2], &z);
+        Float d1 = pConditionalYZ[z]->SampleContinuous(u[1], &pdfs[1], &y);
+        Float d0 = pConditionalXYZ[z * ny + y]->SampleContinuous(u[0], &pdfs[0]);
+        *pdf = pdfs[0] * pdfs[1] * pdfs[2];
+        return Point3f(d0, d1, d2);
+    }
+    Float Pdf(const Point3f &p) const {
+        int ix = Clamp( int(p[0] * nx), 0, nx-1);
+        int iy = Clamp( int(p[1] * ny), 0, ny-1);
+        int iz = Clamp( int(p[2] * nz), 0, nz-1);
+        return (pMarginalZ->funcInt > 0) ? pConditionalXYZ[iz * ny + iy]->func[ix] / pMarginalZ->funcInt: 0.;
+    }
+
+private:
+    // Distribution3D Private Data
+    int nx, ny, nz;
+    std::vector<std::unique_ptr<Distribution1D>> pConditionalXYZ;
+    std::vector<std::unique_ptr<Distribution1D>> pConditionalYZ;
+    std::unique_ptr<Distribution1D> pMarginalZ;
+};
+
 // Sampling Inline Functions
 template <typename T>
 void Shuffle(T *samp, int count, int nDimensions, RNG &rng) {
@@ -168,6 +196,7 @@ inline Float BalanceHeuristic(int nf, Float fPdf, int ng, Float gPdf) {
     return (nf * fPdf) / (nf * fPdf + ng * gPdf);
 }
 
+// PowerHeuristic(1, lightPdf, 1, scatteringPdf);
 inline Float PowerHeuristic(int nf, Float fPdf, int ng, Float gPdf) {
     Float f = nf * fPdf, g = ng * gPdf;
     return (f * f) / (f * f + g * g);

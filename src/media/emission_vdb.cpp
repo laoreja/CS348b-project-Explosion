@@ -31,7 +31,7 @@
  */
 
 
-// media/emission_openvdb.cpp*
+// media/emission_vdb.cpp*
 #include "media/emission_vdb.h"
 #include "paramset.h"
 #include "sampler.h"
@@ -45,6 +45,8 @@ namespace pbrt {
 STAT_RATIO("Media/EmissionOpenVDB steps per Tr() call", nEmissionOpenVDBTrSteps, nEmissionOpenVDBTrCalls);
 
 // EmissionVDBMedium Method Definitions
+
+// The following implementation is slower but definitely more memory efficient
 Float EmissionVDBMedium::Density(const Point3f &p) const {
     // Compute voxel coordinates and offsets for _p_
     return densitySampler->isSample(openvdb::Vec3R(p.x * nx - .5f + sx, p.y * ny - .5f + sy, p.z * nz - .5f + sz));

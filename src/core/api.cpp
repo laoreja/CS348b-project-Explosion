@@ -116,6 +116,7 @@
 #include "media/grid.h"
 #include "media/emission_grid.h"
 #include "media/emission_vdb.h"
+#include "media/emission_evdb.h"
 #include "media/homogeneous.h"
 #include "media/emission_homogeneous.h"
 
@@ -182,6 +183,7 @@ struct RenderOptions {
     TransformSet CameraToWorld;
     std::map<std::string, std::shared_ptr<Medium>> namedMedia;
     std::vector<std::shared_ptr<Light>> lights;
+    std::vector<std::shared_ptr<Medium>> emissiveVolumes;
     std::vector<std::shared_ptr<Primitive>> primitives;
     std::map<std::string, std::vector<std::shared_ptr<Primitive>>> instances;
     std::vector<std::shared_ptr<Primitive>> *currentInstance = nullptr;
@@ -708,6 +710,17 @@ std::shared_ptr<Medium> MakeMedium(const std::string &name,
     } else if (name == "homogeneous_emission") {
         Float T = paramSet.FindOneFloat("T", 1000.0f);
         m = new EmissionHomogeneousMedium(sig_a, sig_s, g, T);
+    } else if (name == "heterogeneous_emission_evdb") {
+        Point3f p0 = paramSet.FindOnePoint3f("p0", Point3f(0.f, 0.f, 0.f));
+        Point3f p1 = paramSet.FindOnePoint3f("p1", Point3f(1.f, 1.f, 1.f));
+        std::string vdb_path = paramSet.FindOneString("vdbpath", "");
+        Float tempScale = paramSet.FindOneFloat("tempscale", 5000.);
+        Float densityScale = paramSet.FindOneFloat("densityscale", 1.);
+        Float sampleProb = paramSet.FindOneFloat("sampleprob", 0.5);
+        Transform data2Medium = Translate(Vector3f(p0)) *
+                                Scale(p1.x - p0.x, p1.y - p0.y, p1.z - p0.z);
+        m = new EmissionEVDBMedium(sig_a, sig_s, g,
+                                  medium2world * data2Medium, tempScale, densityScale, vdb_path, sampleProb);
     } else if (name == "heterogeneous_emission_vdb") {
         Point3f p0 = paramSet.FindOnePoint3f("p0", Point3f(0.f, 0.f, 0.f));
         Point3f p1 = paramSet.FindOnePoint3f("p1", Point3f(1.f, 1.f, 1.f));
@@ -1151,6 +1164,9 @@ void pbrtMakeNamedMedium(const std::string &name, const ParamSet &params) {
     else {
         std::shared_ptr<Medium> medium =
             MakeMedium(type, params, curTransform[0]);
+        if (type == "heterogeneous_emission_evdb") {
+            renderOptions->emissiveVolumes.push_back(medium);
+        }
         if (medium) renderOptions->namedMedia[name] = medium;
     }
     if (PbrtOptions.cat || PbrtOptions.toPly) {
@@ -1708,10 +1724,12 @@ Scene *RenderOptions::MakeScene() {
     std::shared_ptr<Primitive> accelerator =
         MakeAccelerator(AcceleratorName, std::move(primitives), AcceleratorParams);
     if (!accelerator) accelerator = std::make_shared<BVHAccel>(primitives);
-    Scene *scene = new Scene(accelerator, lights);
+//    Scene *scene = new Scene(accelerator, lights);
+    Scene *scene = new Scene(accelerator, lights, emissiveVolumes);
     // Erase primitives and lights from _RenderOptions_
     primitives.clear();
     lights.clear();
+    emissiveVolumes.clear();
     return scene;
 }
 
@@ -1764,10 +1782,14 @@ Integrator *RenderOptions::MakeIntegrator() const {
 
     IntegratorParams.ReportUnused();
     // Warn if no light sources are defined
-    if (lights.empty())
+    if (lights.empty() && emissiveVolumes.empty())
         Warning(
             "No light sources defined in scene; "
             "rendering a black image.");
+    if (emissiveVolumes.size() > 1)
+        Warning(
+                "Only support MIS for 1 emissive volume; "
+                "Ignore MIS for multiple emissive volumes.");
     return integrator;
 }
 

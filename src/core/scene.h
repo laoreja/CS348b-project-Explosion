@@ -43,6 +43,7 @@
 #include "geometry.h"
 #include "primitive.h"
 #include "light.h"
+#include "medium.h"
 
 namespace pbrt {
 
@@ -52,7 +53,18 @@ class Scene {
     // Scene Public Methods
     Scene(std::shared_ptr<Primitive> aggregate,
           const std::vector<std::shared_ptr<Light>> &lights)
-        : lights(lights), aggregate(aggregate) {
+            : lights(lights), aggregate(aggregate) {
+        // Scene Constructor Implementation
+        worldBound = aggregate->WorldBound();
+        for (const auto &light : lights) {
+            light->Preprocess(*this);
+            if (light->flags & (int)LightFlags::Infinite)
+                infiniteLights.push_back(light);
+        }
+    }
+    Scene(std::shared_ptr<Primitive> aggregate,
+          const std::vector<std::shared_ptr<Light>> &lights, const std::vector<std::shared_ptr<Medium>> &emissiveVolumes)
+        : lights(lights), emissiveVolumes(emissiveVolumes), aggregate(aggregate) {
         // Scene Constructor Implementation
         worldBound = aggregate->WorldBound();
         for (const auto &light : lights) {
@@ -69,6 +81,7 @@ class Scene {
 
     // Scene Public Data
     std::vector<std::shared_ptr<Light>> lights;
+    std::vector<std::shared_ptr<Medium>> emissiveVolumes;
     // Store infinite light sources separately for cases where we only want
     // to loop over them.
     std::vector<std::shared_ptr<Light>> infiniteLights;

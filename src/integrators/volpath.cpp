@@ -126,7 +126,7 @@ Spectrum VolPathIntegrator::Li(const RayDifferential &r, const Scene &scene,
             // contribution
             const Distribution1D *lightDistrib =
                 lightDistribution->Lookup(isect.p);
-            L += beta * UniformSampleOneLight(isect, scene, arena, sampler,
+                L += beta * UniformSampleOneLight(isect, scene, arena, sampler,
                                               true, lightDistrib);
 
             // Sample BSDF to get new path direction

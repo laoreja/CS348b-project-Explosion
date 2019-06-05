@@ -206,6 +206,11 @@ class CoefficientSpectrum {
             if (c[i] != 0.) return false;
         return true;
     }
+    bool IsInvalid() const {
+        for (int i = 0; i < nSpectrumSamples; ++i)
+            if (c[i] != -1.) return false;
+        return true;
+    }
     friend CoefficientSpectrum Sqrt(const CoefficientSpectrum &s) {
         CoefficientSpectrum ret;
         for (int i = 0; i < nSpectrumSamples; ++i) ret.c[i] = std::sqrt(s.c[i]);

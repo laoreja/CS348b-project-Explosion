@@ -170,4 +170,40 @@ Distribution2D::Distribution2D(const Float *func, int nu, int nv) {
     pMarginal.reset(new Distribution1D(&marginalFunc[0], nv));
 }
 
+Distribution3D::Distribution3D(const Float *func, int nx, int ny, int nz): nx(nx), ny(ny), nz(nz) {
+//    LeGrid[(p.z * ny + p.y) * nx + p.x]
+    pConditionalXYZ.reserve(nz * ny);
+    pConditionalYZ.reserve(nz);
+    std::vector<Float> YZMarginalFunc;
+    std::vector<Float> ZMarginalFunc;
+    YZMarginalFunc.reserve(nz * ny);
+    ZMarginalFunc.reserve(nz);
+
+    for (int z = 0; z < nz; ++z){
+//        YZMarginalFunc[z].reserve(ny);
+        for (int y = 0; y < ny; ++y){
+            pConditionalXYZ.emplace_back(new Distribution1D(&func[(z * ny + y) * nx], nx));
+            YZMarginalFunc.push_back(pConditionalXYZ[z * ny + y]->funcInt);
+//            YZMarginalFunc[z].push_back(pConditionalXYZ[z][y]->funcInt);
+        }
+        pConditionalYZ.emplace_back(new Distribution1D(&(YZMarginalFunc[z * ny]), ny));
+        ZMarginalFunc.push_back(pConditionalYZ[z]->funcInt);
+    }
+//    for (int z = 0; z < nz; ++z){
+////        YZMarginalFunc[z].reserve(ny);
+////        pConditionalXYZ[z].reserve(ny);
+//        std::cout << "good before y iteration" << std::endl;
+//        for (int y = 0; y < ny; ++y){
+////            pConditionalXYZ[z].emplace_back(new Distribution1D(&func[(z * ny + y) * nx], nx));
+//            Float tmp = pConditionalXYZ[z * ny + y]->funcInt;
+//            std::cout << "pConditionalXYZ[z * ny + y]->funcInt good" << std::endl;
+//            YZMarginalFunc.push_back(pConditionalXYZ[z * ny + y]->funcInt);
+//        }
+//        pConditionalYZ.emplace_back(new Distribution1D(&(YZMarginalFunc[z * ny]), ny));
+//        ZMarginalFunc.push_back(pConditionalYZ[z]->funcInt);
+//    }
+//    std::cout << "good before pMarginalZ.reset" << std::endl;
+    pMarginalZ.reset(new Distribution1D(&(ZMarginalFunc[0]), nz));
+}
+
 }  // namespace pbrt

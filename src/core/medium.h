@@ -75,12 +75,21 @@ inline Float PhaseHG(Float cosTheta, Float g) {
 class Medium {
   public:
     // Medium Interface
+    Medium(Float sampleProb=0.): sampleProb(sampleProb) {};
     virtual ~Medium() {}
     virtual Spectrum Tr(const Ray &ray, Sampler &sampler) const = 0;
     virtual Spectrum Sample(const Ray &ray, Sampler &sampler,
                             MemoryArena &arena,
                             MediumInteraction *mi) const = 0;
+    virtual Spectrum Sample_Li(const Interaction &ref, Sampler &sampler, Vector3f *wi, Float *xPdf, Float *tPdfGivenWi,
+                               VisibilityTester *vis) const {
+        return Spectrum(0.);
+    };
+    virtual  Spectrum Sample_t_given_Wi(const Interaction &ref, Sampler &sampler, const Vector3f &wi, Float *xPdf, Float *tPdfGivenWi, Float *tRay) const {
+        return Spectrum(0.);
+    }
     static void tempToRGBSpectrum(Float T, RGBSpectrum &r);
+    const Float sampleProb;
 };
 
 // HenyeyGreenstein Declarations

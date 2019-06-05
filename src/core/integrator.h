@@ -46,6 +46,7 @@
 #include "reflection.h"
 #include "sampler.h"
 #include "material.h"
+#include "media/emission_evdb.h"
 
 namespace pbrt {
 
@@ -70,6 +71,9 @@ Spectrum EstimateDirect(const Interaction &it, const Point2f &uShading,
                         const Scene &scene, Sampler &sampler,
                         MemoryArena &arena, bool handleMedia = false,
                         bool specular = false);
+Spectrum EmissiveVolumeMIS(const Interaction &it, const Medium &emissiveVolume,
+                           const Scene &scene, Sampler &sampler,
+                           MemoryArena &arena, bool handleMedia = false, bool specular = false);
 std::unique_ptr<Distribution1D> ComputeLightPowerDistribution(
     const Scene &scene);
 
